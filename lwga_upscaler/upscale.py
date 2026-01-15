@@ -17,66 +17,59 @@ class _GradientAwareSplineUpscale(Function):
         dxy: Tensor,
         dst_h: int,
         dst_w: int,
-        roi: tuple[float, float, float, float],
+        src_roi: tuple[float, float, float, float],
     ) -> Tensor:
-        ctx.save_for_backward(render, dx, dy, dxy)
-        ctx.dst_h = dst_h
-        ctx.dst_w = dst_w
-        ctx.roi = roi
+        ctx.src_h = render.shape[0]
+        ctx.src_w = render.shape[1]
+        ctx.src_roi = src_roi
         
-        output = _C.gradient_aware_upscale_forward(
-            render, dx, dy, dxy, dst_h, dst_w, roi
+        upscaled = _C.gradient_aware_upscale_forward(
+            render, dx, dy, dxy, dst_h, dst_w, src_roi
         )
-        return output
+        return upscaled
     
     @staticmethod
     def backward(ctx, grad_output: Tensor):
-        render, dx, dy, dxy = ctx.saved_tensors
-        
-        grad_render, grad_dx, grad_dy, grad_dxy = _C.gradient_aware_upscale_backward(
+        v_render, v_dx, v_dy, v_dxy = _C.gradient_aware_upscale_backward(
             grad_output.contiguous(),
-            render,
-            dx,
-            dy,
-            dxy,
-            ctx.dst_h,
-            ctx.dst_w,
-            ctx.roi,
+            ctx.src_h,
+            ctx.src_w,
+            ctx.src_roi,
         )
         
-        return grad_render, grad_dx, grad_dy, grad_dxy, None, None, None
+        return v_render, v_dx, v_dy, v_dxy, None, None, None
 
 
 def gradient_aware_upscale(
-    render: Tensor,  # [H, W, 3]
-    dx: Tensor,      # [H, W, 3]
-    dy: Tensor,      # [H, W, 3]
-    dxy: Tensor,     # [H, W, 3]
+    render: Tensor,  # [H, W, C]
+    dx: Tensor,      # [H, W, C]
+    dy: Tensor,      # [H, W, C]
+    dxy: Tensor,     # [H, W, C]
     dst_h: int,
     dst_w: int,
-    roi: Optional[Tuple[float, float, float, float]] = None,  # (x1, y1, x2, y2)
+    src_roi: Optional[Tuple[float, float, float, float]] = None,  # (x1, y1, x2, y2)
 ) -> Tensor:
     """
     Bicubic spline interpolation using analytical gradients.
     
     Args:
-        render: Rendered image [H, W, 3]
-        dx: Gradient w.r.t. x [H, W, 3]
-        dy: Gradient w.r.t. y [H, W, 3]
-        dxy: Mixed partial derivative [H, W, 3]
+        render: Rendered image [H, W, C]
+        dx: Gradient w.r.t. x [H, W, C]
+        dy: Gradient w.r.t. y [H, W, C]
+        dxy: Mixed partial derivative [H, W, C]
         dst_h: Output height
         dst_w: Output width
-        roi: Region of interest (x1, y1, x2, y2), defaults to full image
+        src_roi: Source region of interest (x1, y1, x2, y2) in src pixel coordinates, defaults to full image
     
     Returns:
-        Upscaled image [dst_h, dst_w, 3]
+        Upscaled image [dst_h, dst_w, C]
     """
     h, w, c = render.shape
     
-    if roi is None:
-        roi = (0.0, 0.0, float(w), float(h))
+    if src_roi is None:
+        src_roi = (0.0, 0.0, float(w), float(h))
     
     return _GradientAwareSplineUpscale.apply(
         render.contiguous(), dx.contiguous(), dy.contiguous(), dxy.contiguous(),
-        dst_h, dst_w, roi
+        dst_h, dst_w, src_roi
     )
