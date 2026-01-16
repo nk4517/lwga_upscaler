@@ -9,3 +9,5 @@ checkpoints*
 *build*/
 *dist*/
 .idea/
+
+lwga_upscaler/examples/data/
