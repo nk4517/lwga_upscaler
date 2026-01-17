@@ -1,6 +1,7 @@
 """Bicubic spline upscaling using analytical gradients from rasterization"""
 
-from typing import Optional, Tuple
+from typing import Optional
+import torch
 from torch import Tensor
 from torch.autograd import Function
 
@@ -11,16 +12,16 @@ class _GradientAwareSplineUpscale(Function):
     @staticmethod
     def forward(
         ctx,
-        render: Tensor,  # [H, W, 3]
+        render: Tensor,  # [B, H, W, C]
         dx: Tensor,
         dy: Tensor,
         dxy: Tensor,
         dst_h: int,
         dst_w: int,
-        src_roi: tuple[float, float, float, float],
+        src_roi: Tensor,  # [B, 4]
     ) -> Tensor:
-        ctx.src_h = render.shape[0]
-        ctx.src_w = render.shape[1]
+        ctx.src_h = render.shape[1]
+        ctx.src_w = render.shape[2]
         ctx.src_roi = src_roi
         
         upscaled = _C.gradient_aware_upscale_forward(
@@ -41,35 +42,49 @@ class _GradientAwareSplineUpscale(Function):
 
 
 def gradient_aware_upscale(
-    render: Tensor,  # [H, W, C]
-    dx: Tensor,      # [H, W, C]
-    dy: Tensor,      # [H, W, C]
-    dxy: Tensor,     # [H, W, C]
+    render: Tensor,  # [B, H, W, C] or [H, W, C]
+    dx: Tensor,      # [B, H, W, C] or [H, W, C]
+    dy: Tensor,      # [B, H, W, C] or [H, W, C]
+    dxy: Tensor,     # [B, H, W, C] or [H, W, C]
     dst_h: int,
     dst_w: int,
-    src_roi: Optional[Tuple[float, float, float, float]] = None,  # (x1, y1, x2, y2)
+    src_roi: Optional[Tensor] = None,  # [B, 4] or None
 ) -> Tensor:
     """
     Bicubic spline interpolation using analytical gradients.
     
     Args:
-        render: Rendered image [H, W, C]
-        dx: Gradient w.r.t. x [H, W, C]
-        dy: Gradient w.r.t. y [H, W, C]
-        dxy: Mixed partial derivative [H, W, C]
+        render: Rendered image [B, H, W, C] or [H, W, C]
+        dx: Gradient w.r.t. x [B, H, W, C] or [H, W, C]
+        dy: Gradient w.r.t. y [B, H, W, C] or [H, W, C]
+        dxy: Mixed partial derivative [B, H, W, C] or [H, W, C]
         dst_h: Output height
         dst_w: Output width
-        src_roi: Source region of interest (x1, y1, x2, y2) in src pixel coordinates, defaults to full image
+        src_roi: Source ROI [B, 4] with (x1, y1, x2, y2) per batch, defaults to full image
     
     Returns:
-        Upscaled image [dst_h, dst_w, C]
+        Upscaled image [B, dst_h, dst_w, C] or [dst_h, dst_w, C]
     """
-    h, w, c = render.shape
+    unbatched = render.ndim == 3
+    if unbatched:
+        render = render.unsqueeze(0)
+        dx = dx.unsqueeze(0)
+        dy = dy.unsqueeze(0)
+        dxy = dxy.unsqueeze(0)
     
+    b, h, w, c = render.shape
+
     if src_roi is None:
-        src_roi = (0.0, 0.0, float(w), float(h))
+        src_roi = torch.tensor([[0.0, 0.0, float(w), float(h)]], device=render.device).expand(b, 4).contiguous()
+    elif src_roi.ndim == 1:
+        src_roi = src_roi.unsqueeze(0).expand(b, 4).contiguous()
     
-    return _GradientAwareSplineUpscale.apply(
+    result = _GradientAwareSplineUpscale.apply(
         render.contiguous(), dx.contiguous(), dy.contiguous(), dxy.contiguous(),
         dst_h, dst_w, src_roi
     )
+    
+    if unbatched:
+        result = result.squeeze(0)
+    
+    return result

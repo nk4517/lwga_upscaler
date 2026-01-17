@@ -33,10 +33,10 @@ pip install -e .
 ## Usage
 
 The upscaler expects four input tensors from 3DGS rendering:
-- `render`: pixel colors [H, W, C]
-- `dx`: ∂I/∂x analytical gradients [H, W, C]
-- `dy`: ∂I/∂y analytical gradients [H, W, C]
-- `dxy`: ∂²I/∂x∂y mixed partials [H, W, C]
+- `render`: pixel colors [B, H, W, C] or [H, W, C]
+- `dx`: ∂I/∂x analytical gradients [B, H, W, C] or [H, W, C]
+- `dy`: ∂I/∂y analytical gradients [B, H, W, C] or [H, W, C]
+- `dxy`: ∂²I/∂x∂y mixed partials [B, H, W, C] or [H, W, C]
 
 ```python
 from lwga_upscaler import gradient_aware_upscale
@@ -44,9 +44,12 @@ from lwga_upscaler import gradient_aware_upscale
 output = gradient_aware_upscale(
     render, dx, dy, dxy,
     dst_h, dst_w,
-    roi=(x1, y1, x2, y2)  # optional
+    src_roi=roi_tensor  # optional, [B, 4] or [4] with (x1, y1, x2, y2)
 )
 ```
+
+Batched inputs return [B, dst_h, dst_w, C], unbatched return [dst_h, dst_w, C].
+When `src_roi` is [4], the same ROI applies to all batch elements.
 
 The operation is fully differentiable — gradients flow back through all four input tensors.
 

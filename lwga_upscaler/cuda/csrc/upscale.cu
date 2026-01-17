@@ -177,25 +177,38 @@ __device__ __forceinline__ T spline_interp(
 
 template<typename T>
 __global__ void gradient_aware_upscale_kernel(
+    const int batch_size,
     const int dst_h,
     const int dst_w,
     const int src_h,
     const int src_w,
-    const float roi_x1,
-    const float roi_y1,
-    const float roi_x2,
-    const float roi_y2,
+    const float* __restrict__ roi,
     const T* __restrict__ render,
     const T* __restrict__ dx,
     const T* __restrict__ dy,
     const T* __restrict__ dxy,
     T* __restrict__ output
 ) {
-    const int dst_x = blockIdx.x * blockDim.x + threadIdx.x;
+    const int batch_idx = blockIdx.x;
     const int dst_y = blockIdx.y * blockDim.y + threadIdx.y;
+    const int dst_x = blockIdx.z * blockDim.x + threadIdx.x;
 
-    if (dst_x >= dst_w || dst_y >= dst_h) return;
+    if (dst_x >= dst_w || dst_y >= dst_h || batch_idx >= batch_size) return;
 
+    const int src_stride = src_h * src_w;
+    const int dst_stride = dst_h * dst_w;
+
+    roi += batch_idx * 4;
+    render += batch_idx * src_stride;
+    dx += batch_idx * src_stride;
+    dy += batch_idx * src_stride;
+    dxy += batch_idx * src_stride;
+    output += batch_idx * dst_stride;
+
+    const float roi_x1 = roi[0];
+    const float roi_y1 = roi[1];
+    const float roi_x2 = roi[2];
+    const float roi_y2 = roi[3];
     const float roi_w = roi_x2 - roi_x1;
     const float roi_h = roi_y2 - roi_y1;
 
@@ -244,14 +257,12 @@ __global__ void gradient_aware_upscale_kernel(
 }
 
 template __global__ void gradient_aware_upscale_kernel<float>(
+    const int batch_size,
     const int dst_h,
     const int dst_w,
     const int src_h,
     const int src_w,
-    const float roi_x1,
-    const float roi_y1,
-    const float roi_x2,
-    const float roi_y2,
+    const float* __restrict__ roi,
     const float* __restrict__ render,
     const float* __restrict__ dx,
     const float* __restrict__ dy,
@@ -259,14 +270,12 @@ template __global__ void gradient_aware_upscale_kernel<float>(
     float* __restrict__ output);
 
 template __global__ void gradient_aware_upscale_kernel<float2>(
+    const int batch_size,
     const int dst_h,
     const int dst_w,
     const int src_h,
     const int src_w,
-    const float roi_x1,
-    const float roi_y1,
-    const float roi_x2,
-    const float roi_y2,
+    const float* __restrict__ roi,
     const float2* __restrict__ render,
     const float2* __restrict__ dx,
     const float2* __restrict__ dy,
@@ -274,14 +283,12 @@ template __global__ void gradient_aware_upscale_kernel<float2>(
     float2* __restrict__ output);
 
 template __global__ void gradient_aware_upscale_kernel<float3>(
+    const int batch_size,
     const int dst_h,
     const int dst_w,
     const int src_h,
     const int src_w,
-    const float roi_x1,
-    const float roi_y1,
-    const float roi_x2,
-    const float roi_y2,
+    const float* __restrict__ roi,
     const float3* __restrict__ render,
     const float3* __restrict__ dx,
     const float3* __restrict__ dy,
@@ -289,14 +296,12 @@ template __global__ void gradient_aware_upscale_kernel<float3>(
     float3* __restrict__ output);
 
 template __global__ void gradient_aware_upscale_kernel<float4>(
+    const int batch_size,
     const int dst_h,
     const int dst_w,
     const int src_h,
     const int src_w,
-    const float roi_x1,
-    const float roi_y1,
-    const float roi_x2,
-    const float roi_y2,
+    const float* __restrict__ roi,
     const float4* __restrict__ render,
     const float4* __restrict__ dx,
     const float4* __restrict__ dy,
@@ -304,14 +309,12 @@ template __global__ void gradient_aware_upscale_kernel<float4>(
     float4* __restrict__ output);
 
 template __global__ void gradient_aware_upscale_kernel<float5>(
+    const int batch_size,
     const int dst_h,
     const int dst_w,
     const int src_h,
     const int src_w,
-    const float roi_x1,
-    const float roi_y1,
-    const float roi_x2,
-    const float roi_y2,
+    const float* __restrict__ roi,
     const float5* __restrict__ render,
     const float5* __restrict__ dx,
     const float5* __restrict__ dy,
@@ -321,25 +324,38 @@ template __global__ void gradient_aware_upscale_kernel<float5>(
 
 template<typename T>
 __global__ void gradient_aware_upscale_backward_kernel(
+    const int batch_size,
     const int dst_h,
     const int dst_w,
     const int src_h,
     const int src_w,
-    const float roi_x1,
-    const float roi_y1,
-    const float roi_x2,
-    const float roi_y2,
+    const float* __restrict__ roi,
     const T* __restrict__ grad_output,  // [dst_H, dst_W] of float3
     T* __restrict__ grad_render,        // [src_H, src_W] of float3
     T* __restrict__ grad_dx,
     T* __restrict__ grad_dy,
     T* __restrict__ grad_dxy
 ) {
-    const int dst_x = blockIdx.x * blockDim.x + threadIdx.x;
+    const int batch_idx = blockIdx.x;
     const int dst_y = blockIdx.y * blockDim.y + threadIdx.y;
+    const int dst_x = blockIdx.z * blockDim.x + threadIdx.x;
 
-    if (dst_x >= dst_w || dst_y >= dst_h) return;
+    if (dst_x >= dst_w || dst_y >= dst_h || batch_idx >= batch_size) return;
 
+    const int src_stride = src_h * src_w;
+    const int dst_stride = dst_h * dst_w;
+
+    roi += batch_idx * 4;
+    grad_output += batch_idx * dst_stride;
+    grad_render += batch_idx * src_stride;
+    grad_dx += batch_idx * src_stride;
+    grad_dy += batch_idx * src_stride;
+    grad_dxy += batch_idx * src_stride;
+
+    const float roi_x1 = roi[0];
+    const float roi_y1 = roi[1];
+    const float roi_x2 = roi[2];
+    const float roi_y2 = roi[3];
     const float roi_w = roi_x2 - roi_x1;
     const float roi_h = roi_y2 - roi_y1;
 
@@ -404,14 +420,12 @@ __global__ void gradient_aware_upscale_backward_kernel(
 }
 
 template __global__ void gradient_aware_upscale_backward_kernel<float>(
+    const int batch_size,
     const int dst_h,
     const int dst_w,
     const int src_h,
     const int src_w,
-    const float roi_x1,
-    const float roi_y1,
-    const float roi_x2,
-    const float roi_y2,
+    const float* __restrict__ roi,
     const float* __restrict__ grad_output,
     float* __restrict__ grad_render,
     float* __restrict__ grad_dx,
@@ -419,14 +433,12 @@ template __global__ void gradient_aware_upscale_backward_kernel<float>(
     float* __restrict__ grad_dxy);
 
 template __global__ void gradient_aware_upscale_backward_kernel<float2>(
+    const int batch_size,
     const int dst_h,
     const int dst_w,
     const int src_h,
     const int src_w,
-    const float roi_x1,
-    const float roi_y1,
-    const float roi_x2,
-    const float roi_y2,
+    const float* __restrict__ roi,
     const float2* __restrict__ grad_output,
     float2* __restrict__ grad_render,
     float2* __restrict__ grad_dx,
@@ -434,14 +446,12 @@ template __global__ void gradient_aware_upscale_backward_kernel<float2>(
     float2* __restrict__ grad_dxy);
 
 template __global__ void gradient_aware_upscale_backward_kernel<float3>(
+    const int batch_size,
     const int dst_h,
     const int dst_w,
     const int src_h,
     const int src_w,
-    const float roi_x1,
-    const float roi_y1,
-    const float roi_x2,
-    const float roi_y2,
+    const float* __restrict__ roi,
     const float3* __restrict__ grad_output,
     float3* __restrict__ grad_render,
     float3* __restrict__ grad_dx,
@@ -449,14 +459,12 @@ template __global__ void gradient_aware_upscale_backward_kernel<float3>(
     float3* __restrict__ grad_dxy);
 
 template __global__ void gradient_aware_upscale_backward_kernel<float4>(
+    const int batch_size,
     const int dst_h,
     const int dst_w,
     const int src_h,
     const int src_w,
-    const float roi_x1,
-    const float roi_y1,
-    const float roi_x2,
-    const float roi_y2,
+    const float* __restrict__ roi,
     const float4* __restrict__ grad_output,
     float4* __restrict__ grad_render,
     float4* __restrict__ grad_dx,
@@ -464,14 +472,12 @@ template __global__ void gradient_aware_upscale_backward_kernel<float4>(
     float4* __restrict__ grad_dxy);
 
 template __global__ void gradient_aware_upscale_backward_kernel<float5>(
+    const int batch_size,
     const int dst_h,
     const int dst_w,
     const int src_h,
     const int src_w,
-    const float roi_x1,
-    const float roi_y1,
-    const float roi_x2,
-    const float roi_y2,
+    const float* __restrict__ roi,
     const float5* __restrict__ grad_output,
     float5* __restrict__ grad_render,
     float5* __restrict__ grad_dx,
@@ -487,25 +493,38 @@ template __global__ void gradient_aware_upscale_backward_kernel<float5>(
 //   role (1,1): cell [sx-1, sx) x [sy-1, sy)
 template<typename T>
 __global__ void gradient_aware_upscale_backward_src_centric_kernel(
+    const int batch_size,
     const int dst_h,
     const int dst_w,
     const int src_h,
     const int src_w,
-    const float roi_x1,
-    const float roi_y1,
-    const float roi_x2,
-    const float roi_y2,
+    const float* __restrict__ roi,
     const T* __restrict__ grad_output,
     T* __restrict__ grad_render,
     T* __restrict__ grad_dx,
     T* __restrict__ grad_dy,
     T* __restrict__ grad_dxy
 ) {
-    const int sx = blockIdx.x * blockDim.x + threadIdx.x;
+    const int batch_idx = blockIdx.x;
     const int sy = blockIdx.y * blockDim.y + threadIdx.y;
+    const int sx = blockIdx.z * blockDim.x + threadIdx.x;
 
-    if (sx >= src_w || sy >= src_h) return;
+    if (sx >= src_w || sy >= src_h || batch_idx >= batch_size) return;
 
+    const int src_stride = src_h * src_w;
+    const int dst_stride = dst_h * dst_w;
+
+    roi += batch_idx * 4;
+    grad_output += batch_idx * dst_stride;
+    grad_render += batch_idx * src_stride;
+    grad_dx += batch_idx * src_stride;
+    grad_dy += batch_idx * src_stride;
+    grad_dxy += batch_idx * src_stride;
+
+    const float roi_x1 = roi[0];
+    const float roi_y1 = roi[1];
+    const float roi_x2 = roi[2];
+    const float roi_y2 = roi[3];
     const float roi_w = roi_x2 - roi_x1;
     const float roi_h = roi_y2 - roi_y1;
     const float scale_x = (float)dst_w / roi_w;
@@ -592,36 +611,36 @@ __global__ void gradient_aware_upscale_backward_src_centric_kernel(
 }
 
 template __global__ void gradient_aware_upscale_backward_src_centric_kernel<float>(
-    const int, const int, const int, const int,
-    const float, const float, const float, const float,
+    const int, const int, const int, const int, const int,
+    const float* __restrict__,
     const float* __restrict__,
     float* __restrict__, float* __restrict__,
     float* __restrict__, float* __restrict__);
 
 template __global__ void gradient_aware_upscale_backward_src_centric_kernel<float2>(
-    const int, const int, const int, const int,
-    const float, const float, const float, const float,
+    const int, const int, const int, const int, const int,
+    const float* __restrict__,
     const float2* __restrict__,
     float2* __restrict__, float2* __restrict__,
     float2* __restrict__, float2* __restrict__);
 
 template __global__ void gradient_aware_upscale_backward_src_centric_kernel<float3>(
-    const int, const int, const int, const int,
-    const float, const float, const float, const float,
+    const int, const int, const int, const int, const int,
+    const float* __restrict__,
     const float3* __restrict__,
     float3* __restrict__, float3* __restrict__,
     float3* __restrict__, float3* __restrict__);
 
 template __global__ void gradient_aware_upscale_backward_src_centric_kernel<float4>(
-    const int, const int, const int, const int,
-    const float, const float, const float, const float,
+    const int, const int, const int, const int, const int,
+    const float* __restrict__,
     const float4* __restrict__,
     float4* __restrict__, float4* __restrict__,
     float4* __restrict__, float4* __restrict__);
 
 template __global__ void gradient_aware_upscale_backward_src_centric_kernel<float5>(
-    const int, const int, const int, const int,
-    const float, const float, const float, const float,
+    const int, const int, const int, const int, const int,
+    const float* __restrict__,
     const float5* __restrict__,
     float5* __restrict__, float5* __restrict__,
     float5* __restrict__, float5* __restrict__);
