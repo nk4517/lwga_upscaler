@@ -1,0 +1,11 @@
+*.pyc
+*.gif
+*.png
+*.jpg
+*.egg
+*.egg-info
+
+checkpoints*
+*build*/
+*dist*/
+.idea/
